@@ -126,17 +126,18 @@ precisely what a dual-screen phone gives you for free.
 
 ## Status and milestones
 
-Documentation-only scaffold — no app code exists yet.
+M1 foundation is present: native Xcode/iPhone target, static field/tray
+layout seam, CI, and gates. No gameplay or release claim is made.
 
-1. **M0 Scaffold (this repo):** plan, backlog, toolchain pins. ✔
-2. **M1 Playable core:** project skeleton + CI, SpriteKit wave loop, 3
-   blockers, block line, score.
-3. **M2 Game depth:** 6 blockers, dilemma gates, wave ladder, coins/unlocks.
-4. **M3 Polish & assets:** App Store copy + real generated icon
+1. **M0 Scaffold:** plan, backlog, toolchain pins. ✔
+2. **M1 Foundation (#1):** native target, pinned CI, layout seam. ✔
+3. **M2 Playable core (#2–#3):** wave engine, SpriteKit loop, 3 blockers, score.
+4. **M3 Game depth:** 6 blockers, dilemma gates, wave ladder, coins/unlocks.
+5. **M4 Polish & assets:** App Store copy + real generated icon
    (`AppStore/icon.png`), haptics, accessibility pass.
-5. **M4 Data & release:** save export/import/delete, `.github/workflows/release.yml`
+6. **M5 Data & release:** save export/import/delete, `.github/workflows/release.yml`
    TestFlight publish Action, App Store submission.
-6. **M5 Duo migration (blocked on Apple SDK):** dual-screen layout behind
+7. **M6 Duo migration (blocked on Apple SDK):** dual-screen layout behind
    `FlockWorkspaceLayout`.
 
 ## Development quickstart
@@ -149,7 +150,7 @@ git clone https://github.com/rwrife/flock-block.git
 # macOS with the pinned Xcode:
 cd flock-block
 xcodebuild -project FlockBlock.xcodeproj -scheme FlockBlock \
-  -destination 'generic/platform=iOS Simulator' build   # once M1 lands
+  -destination 'generic/platform=iOS Simulator' build
 ```
 
 On non-Apple hosts, structural checks and Swift lint only — never claim iOS
