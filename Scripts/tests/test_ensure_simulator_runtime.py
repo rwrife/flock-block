@@ -1,6 +1,7 @@
+import subprocess
 import unittest
 
-from Scripts.ensure_simulator_runtime import has_runtime
+from Scripts.ensure_simulator_runtime import has_runtime, list_runtimes, RETRY_TIMEOUT_SECONDS
 
 
 class RuntimeTests(unittest.TestCase):
