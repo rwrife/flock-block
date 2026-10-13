@@ -121,6 +121,30 @@ class BootTests(unittest.TestCase):
 
         self.assertEqual(len(runner.calls), 5)
 
+    def test_first_bootstatus_uses_generous_bound_then_normal_retry(self):
+        stalled = subprocess.TimeoutExpired(
+            ["xcrun", "simctl", "bootstatus", "PHONE-26", "-b"], 420, output=""
+        )
+        runner = FakeRunner(
+            [
+                self.completed(output="boot requested\n"),
+                stalled,
+                self.completed(output="shutdown ok\n"),
+                self.completed(output="boot requested again\n"),
+                self.completed(output="booted\n"),
+            ]
+        )
+
+        boot_selected_simulator(
+            "PHONE-26", devices(), self.log_path,
+            bootstatus_timeout=180, first_bootstatus_timeout=420, runner=runner,
+        )
+
+        timeouts = [kwargs["timeout"] for _, kwargs in runner.calls]
+        # boot, first bootstatus (generous), shutdown, retry boot, retry
+        # bootstatus (normal bound)
+        self.assertEqual(timeouts, [120, 420, 90, 120, 180])
+
     def test_boot_nonzero_exit_is_not_ignored(self):
         runner = FakeRunner([self.completed(returncode=9, output="boot failed\n")])
 

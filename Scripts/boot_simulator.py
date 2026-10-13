@@ -105,12 +105,20 @@ def boot_selected_simulator(
     *,
     boot_timeout: int = 120,
     bootstatus_timeout: int = 180,
+    first_bootstatus_timeout: int | None = None,
     runner: Runner = subprocess.run,
 ) -> None:
     state = device_state(devices, udid)
     log_path.write_text(f"Selected {udid}; initial state is {state}\n", encoding="utf-8")
 
-    def attempt_boot() -> None:
+    # First boot on a freshly downloaded platform prepares the device image
+    # lazily and has been measured past 300s on hosted runners (swarm-gate
+    # runs 38068161640/38280518348). Give attempt 1 a generous bound; the
+    # retry keeps the normal one.
+    first_bound = first_bootstatus_timeout or bootstatus_timeout
+    bounds = [first_bound, bootstatus_timeout]
+
+    def attempt_boot(attempt: int) -> None:
         if state == "Booted":
             with log_path.open("a", encoding="utf-8") as log:
                 log.write("Simulator is already Booted; skipping simctl boot.\n")
@@ -123,13 +131,13 @@ def boot_selected_simulator(
             )
         run_logged(
             ["xcrun", "simctl", "bootstatus", udid, "-b"],
-            bootstatus_timeout,
+            bounds[attempt],
             log_path,
             runner=runner,
         )
 
     try:
-        attempt_boot()
+        attempt_boot(0)
     except SimulatorBootError as error:
         # Hosted runners sometimes hand out a simulator whose CoreSimulator
         # boot wedges until the timeout (seat-weave PR #8/#9 measured this
@@ -139,9 +147,9 @@ def boot_selected_simulator(
             raise
         with log_path.open("a", encoding="utf-8") as log:
             log.write("Boot stalled; shutting down and retrying boot once.\n")
-        _shutdown_best_effort(udid, log_path, timeout=30, runner=runner)
+        _shutdown_best_effort(udid, log_path, timeout=90, runner=runner)
         try:
-            attempt_boot()
+            attempt_boot(1)
         except SimulatorBootError as retry_error:
             if not retry_error.timed_out:
                 raise
@@ -170,6 +178,7 @@ def main() -> int:
     boot_parser.add_argument("--log", type=Path, required=True)
     boot_parser.add_argument("--boot-timeout", type=int, default=120)
     boot_parser.add_argument("--bootstatus-timeout", type=int, default=180)
+    boot_parser.add_argument("--first-bootstatus-timeout", type=int, default=None)
 
     capture_parser = subparsers.add_parser("capture")
     capture_parser.add_argument("--output", type=Path, required=True)
@@ -191,6 +200,7 @@ def main() -> int:
             args.log,
             boot_timeout=args.boot_timeout,
             bootstatus_timeout=args.bootstatus_timeout,
+            first_bootstatus_timeout=args.first_bootstatus_timeout,
         )
     except (OSError, json.JSONDecodeError, SimulatorBootError) as error:
         print(f"Simulator boot failed: {error}", file=sys.stderr)
