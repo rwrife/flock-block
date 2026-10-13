@@ -1,0 +1,23 @@
+DRAFT LISTING — planned features below. Validate against shipped app before publication.
+
+Flip the bird game: in Flock Block, the birds are coming at YOU — and you build the walls.
+
+Flocks sweep down in lanes and only you decide how they get stopped. Drag springy trampolines, sticky tar patches, spinning fans, cardboard walls, balloon nets, and decoy feeders onto the field, then watch a well-timed defense bonk the whole flock silly. Some waves get greedy: a tagged bird pays a bonus ONLY if you let it slip past, so blocking everything isn't always the winning play.
+
+WHY YOU'LL LIKE IT
+- One-thumb, portrait, one-more-run sessions: every wave is under a minute.
+- You're the architect, not the victim — read the pattern, place the block.
+- Six quirky blocker types with distinct physics; unlock them with coins you earn by playing. No purchases, no ads, no timers.
+- Dilemma gates reward risky, greedy calls on top of safe defense.
+- A gentle learning curve with patterns that stay readable — no frame-perfect reflexes required.
+
+BUILT FOR YOUR POCKET
+- Playable entirely offline. No account, no sign-up, no cloud, no trackers, no ads.
+- Your progress, coins, unlocks, and high scores stay on your device, with a one-tap full delete and a plain-JSON save export whenever you want it.
+- Designed one-handed with big targets, haptic taps, VoiceOver-labelled menus, Dynamic Type, and a reduce-motion mode.
+- Colorful, comic, zero-violence chaos: dizzy birds just shake it off and waddle away.
+
+COMING SOON TO A DUAL SCREEN
+Flock Block is designed from day one for the iPhone Duo dual-screen phone: flocks on the top screen, your blocker tray and score live on the bottom — no fingers ever covering the action. Today it plays as a standard single-screen iPhone game with the same rules, and the dual-screen mode arrives when Apple's foldable APIs ship.
+
+Flock Block is an original arcade puzzler — not affiliated with or derived from any existing game.
