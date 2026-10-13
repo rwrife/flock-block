@@ -95,23 +95,8 @@ DEVELOPER_DIR="$(<"$artifact_dir/developer-dir.txt")"
 phase="simulator_runtime"
 python3 Scripts/ensure_simulator_runtime.py 2>&1 | tee "$artifact_dir/simulator-runtime.log"
 
-phase="simulator_selection"
-sdk_version="$(python3 -c 'import json; print(json.load(open("toolchain.json", encoding="utf-8"))["iphoneos_sdk"])')"
-simulator_udid="$(python3 Scripts/select_simulator.py \
-  --sdk "$sdk_version" \
-  --devices-json-out "$artifact_dir/simulator-devices.json")"
-echo "platform=iOS Simulator,id=$simulator_udid" > "$artifact_dir/destination.txt"
-
-phase="simulator_boot"
-python3 Scripts/boot_simulator.py boot \
-  --udid "$simulator_udid" \
-  --devices-json "$artifact_dir/simulator-devices.json" \
-  --log "$artifact_dir/simulator-boot.log" \
-  --boot-timeout 120 \
-  --bootstatus-timeout 180 \
-  --first-bootstatus-timeout 420 \
-  2> >(tee -a "$artifact_dir/simulator-boot.log" >&2)
-
+# Build before boot: fresh hosted CoreSimulator instances can hang for 10+
+# minutes, but app compilation and built Info.plist are independent evidence.
 phase="domain_tests"
 xcrun swift test \
   --package-path Packages/FlockKit \
@@ -122,7 +107,7 @@ xcodebuild build \
   -project FlockBlock.xcodeproj \
   -scheme FlockBlock \
   -configuration Debug \
-  -destination "platform=iOS Simulator,id=$simulator_udid" \
+  -destination 'generic/platform=iOS Simulator' \
   -derivedDataPath "$derived_data" \
   -resultBundlePath "$artifact_dir/build.xcresult" \
   CODE_SIGNING_ALLOWED=NO \
@@ -146,7 +131,28 @@ family = info.get("UIDeviceFamily")
 if family != [1]:
     raise SystemExit(f"Built app UIDeviceFamily must be [1], observed {family!r}")
 print("Verified built app UIDeviceFamily == [1] (iPhone only)")
+expected_id = "com.infinityball.flockblock"
+if info.get("CFBundleIdentifier") != expected_id:
+    raise SystemExit(f"Built app bundle id must be {expected_id}, observed {info.get('CFBundleIdentifier')!r}")
+print(f"Verified built app CFBundleIdentifier == {expected_id}")
 PYTHON
+
+phase="simulator_selection"
+sdk_version="$(python3 -c 'import json; print(json.load(open("toolchain.json", encoding="utf-8"))["iphoneos_sdk"])')"
+simulator_udid="$(python3 Scripts/select_simulator.py \
+  --sdk "$sdk_version" \
+  --devices-json-out "$artifact_dir/simulator-devices.json")"
+echo "platform=iOS Simulator,id=$simulator_udid" > "$artifact_dir/destination.txt"
+
+phase="simulator_boot"
+python3 Scripts/boot_simulator.py boot \
+  --udid "$simulator_udid" \
+  --devices-json "$artifact_dir/simulator-devices.json" \
+  --log "$artifact_dir/simulator-boot.log" \
+  --boot-timeout 120 \
+  --bootstatus-timeout 180 \
+  --first-bootstatus-timeout 420 \
+  2> >(tee -a "$artifact_dir/simulator-boot.log" >&2)
 
 phase="ui_tests"
 xcodebuild test \
