@@ -26,6 +26,14 @@ public enum BlockerKind: Int, CaseIterable, Sendable, Codable {
         case .tar: 20
         }
     }
+
+    public var displayName: String {
+        switch self {
+        case .wall: "Wall"
+        case .trampoline: "Trampoline"
+        case .tar: "Tar"
+        }
+    }
 }
 
 public struct Bird: Equatable, Sendable {
@@ -74,6 +82,21 @@ public struct WavePlan: Equatable, Sendable {
         }
         try self.init(birds: generated)
     }
+
+    /// Hand-authored M2 demo wave: every lane telegraphed, lane 0 repeats
+    /// fast enough to show a wall-cooldown slip, and no bird can resolve
+    /// before tick 40 so a one-thumb start→select→place flow lands in time.
+    /// Fixed input, fixed result: score 10, 1 bonk, 4 escapes.
+    public static let tutorialFixture: WavePlan = {
+        let plan = try! WavePlan(birds: [
+            Bird(id: 1, lane: 0, spawnTick: 35, speed: 1),
+            Bird(id: 2, lane: 1, spawnTick: 36, speed: 2),
+            Bird(id: 3, lane: 2, spawnTick: 38, speed: 2),
+            Bird(id: 4, lane: 3, spawnTick: 39, speed: 3),
+            Bird(id: 5, lane: 0, spawnTick: 37, speed: 2),
+        ])
+        return plan
+    }()
 }
 
 public struct WaveEvent: Equatable, Sendable {
@@ -113,6 +136,25 @@ public struct WaveEngine: Sendable {
 
     public var isFinished: Bool { nextBird == plan.birds.count && active.isEmpty }
     public func blocker(in lane: Int) -> BlockerKind? { blockers[lane]?.kind }
+
+    /// Read-only frame for SpriteKit; never mutate rules from rendering.
+    public var activeBirds: [(id: Int, lane: Int, speed: Int, position: Int)] {
+        active.map { ($0.bird.id, $0.bird.lane, $0.bird.speed, $0.position) }
+    }
+
+    public var blockedLanes: [(lane: Int, kind: BlockerKind, cooling: Bool)] {
+        blockers.keys.sorted().compactMap { lane in
+            blockers[lane].map { (lane, $0.kind, $0.readyTick > tick) }
+        }
+    }
+
+    /// Preview the next few ticks before birds enter; no hidden bird data.
+    public var incomingBirds: [(lane: Int, speed: Int, ticksAway: Int)] {
+        guard nextBird < plan.birds.count else { return [] }
+        return plan.birds[nextBird...].filter { $0.spawnTick < tick + 3 }.map {
+            ($0.lane, $0.speed, $0.spawnTick - tick)
+        }
+    }
 
     /// One permanent blocker per lane. Charge energy at placement, never at collision.
     public mutating func place(_ kind: BlockerKind, in lane: Int) throws {

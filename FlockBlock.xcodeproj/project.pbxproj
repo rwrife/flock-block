@@ -10,6 +10,7 @@
 		A10000000000000000000102 /* WorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000202 /* WorkspaceView.swift */; };
 		A10000000000000000000103 /* FlockBlockLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000203 /* FlockBlockLaunchTests.swift */; };
 		A10000000000000000000104 /* FlockKit in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000801 /* FlockKit */; };
+		A10000000000000000000105 /* GameSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000206 /* GameSession.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -28,6 +29,7 @@
 		A10000000000000000000203 /* FlockBlockLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlockBlockLaunchTests.swift; sourceTree = "<group>"; };
 		A10000000000000000000204 /* FlockBlock.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FlockBlock.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000205 /* FlockBlockUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FlockBlockUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000206 /* GameSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameSession.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -60,6 +62,7 @@
 			children = (
 				A10000000000000000000201 /* FlockBlockApp.swift */,
 				A10000000000000000000202 /* WorkspaceView.swift */,
+				A10000000000000000000206 /* GameSession.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -158,6 +161,7 @@
 			files = (
 				A10000000000000000000101 /* FlockBlockApp.swift in Sources */,
 				A10000000000000000000102 /* WorkspaceView.swift in Sources */,
+				A10000000000000000000105 /* GameSession.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
