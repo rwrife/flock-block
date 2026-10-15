@@ -126,12 +126,15 @@ precisely what a dual-screen phone gives you for free.
 
 ## Status and milestones
 
-M1 foundation is present: native Xcode/iPhone target, static field/tray
-layout seam, CI, and gates. No gameplay or release claim is made.
+M1 foundation and the M2 playable core are present: native Xcode/iPhone
+target, deterministic four-lane wave engine, one-thumb SpriteKit tutorial
+wave (start → place one of three blockers → collide/escape → results →
+replay), CI, and gates. No coins/unlocks, save/export, icon, or release claim
+is made.
 
 1. **M0 Scaffold:** plan, backlog, toolchain pins. ✔
 2. **M1 Foundation (#1):** native target, pinned CI, layout seam. ✔
-3. **M2 Playable core (#2–#3):** wave engine, SpriteKit loop, 3 blockers, score.
+3. **M2 Playable core (#2–#3):** wave engine, SpriteKit loop, 3 blockers, score. ✔
 4. **M3 Game depth:** 6 blockers, dilemma gates, wave ladder, coins/unlocks.
 5. **M4 Polish & assets:** App Store copy + real generated icon
    (`AppStore/icon.png`), haptics, accessibility pass.

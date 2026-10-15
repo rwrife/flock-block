@@ -98,6 +98,28 @@ struct WaveEngineTests {
         #expect(first.1 != other.1)
     }
 
+    @Test("tutorial fixture starts, accepts a blocker, resolves collisions and completes replay")
+    func tutorialFlow() throws {
+        func play() throws -> WaveEngine {
+            var wave = try WaveEngine(plan: .tutorialFixture)
+            #expect(wave.plan.birds.count == 5)
+            #expect(Set(wave.plan.birds.map(\.lane)) == Set(0..<4))
+            try wave.place(.wall, in: 0)
+            #expect(wave.energy == 10)
+            while !wave.isFinished {
+                #expect(wave.tick < 80)
+                wave.advance()
+            }
+            return wave
+        }
+        let first = try play()
+        let replay = try play()
+        #expect(first.events == replay.events)
+        #expect(first.score == 10)
+        #expect(first.bonks == 1 && first.escapes == 4)
+        #expect(first.isFinished && replay.isFinished)
+    }
+
     @Test("advancing after completion is inert")
     func completedWaveRejectsWork() throws {
         var subject = try Self.engine([try Bird(id: 1, lane: 3, spawnTick: 0, speed: 3)])
