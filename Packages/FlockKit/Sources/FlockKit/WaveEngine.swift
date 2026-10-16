@@ -1,12 +1,22 @@
 /// Deterministic, tick-based four-lane rules. Rendering and input live outside this module.
 public enum BlockerKind: Int, CaseIterable, Sendable, Codable {
+    // Starters (always unlocked) first; rawValue order is stable for saves.
     case wall, trampoline, tar
+    /// Earn-only unlocks: blows a bird back to the start once.
+    case fan
+    /// Catches up to `capacity` birds, then is spent for the wave.
+    case balloonNet
+    /// Stalls a bird for `stallTicks` while it eats, once per bird.
+    case decoyFeeder
 
     public var cost: Int {
         switch self {
         case .wall: 2
         case .trampoline: 3
         case .tar: 4
+        case .fan: 3
+        case .balloonNet: 5
+        case .decoyFeeder: 4
         }
     }
 
@@ -16,6 +26,9 @@ public enum BlockerKind: Int, CaseIterable, Sendable, Codable {
         case .wall: 2
         case .trampoline: 1
         case .tar: 3
+        case .fan: 2
+        case .balloonNet: 0
+        case .decoyFeeder: 1
         }
     }
 
@@ -24,14 +37,62 @@ public enum BlockerKind: Int, CaseIterable, Sendable, Codable {
         case .wall: 10
         case .trampoline: 15
         case .tar: 20
+        case .fan: 12
+        case .balloonNet: 18
+        case .decoyFeeder: 8
         }
     }
+
+    /// Birds a blocker can affect before it is spent (nil = unlimited).
+    public var capacity: Int? { self == .balloonNet ? 2 : nil }
+
+    /// Ticks a decoyed bird holds just short of the blocker line.
+    public static let stallTicks = 3
+
+    /// Coins needed to unlock; starters are free. Coins are earned, never bought.
+    public var unlockCost: Int {
+        switch self {
+        case .wall, .trampoline, .tar: 0
+        case .fan: 6
+        case .balloonNet: 10
+        case .decoyFeeder: 14
+        }
+    }
+
+    public var isStarter: Bool { unlockCost == 0 }
 
     public var displayName: String {
         switch self {
         case .wall: "Wall"
         case .trampoline: "Trampoline"
         case .tar: "Tar"
+        case .fan: "Fan"
+        case .balloonNet: "Balloon net"
+        case .decoyFeeder: "Decoy feeder"
+        }
+    }
+
+    /// Stable short id for accessibility identifiers and tests.
+    public var identifier: String {
+        switch self {
+        case .wall: "wall"
+        case .trampoline: "trampoline"
+        case .tar: "tar"
+        case .fan: "fan"
+        case .balloonNet: "net"
+        case .decoyFeeder: "decoy"
+        }
+    }
+
+    /// One-line behavior, shown to VoiceOver and used by store copy audits.
+    public var behavior: String {
+        switch self {
+        case .wall: "bonks a bird"
+        case .trampoline: "bounces a bird away"
+        case .tar: "sticks a bird"
+        case .fan: "blows a bird back to the start once"
+        case .balloonNet: "catches two birds then pops"
+        case .decoyFeeder: "stalls a bird for a snack once"
         }
     }
 }
@@ -41,14 +102,18 @@ public struct Bird: Equatable, Sendable {
     public let lane: Int
     public let spawnTick: Int
     public let speed: Int
+    /// Release-for-bonus gate: pays `WaveEngine.releaseBonus` only if this bird
+    /// reaches the far row untouched by any blocker.
+    public let gated: Bool
 
-    public init(id: Int, lane: Int, spawnTick: Int, speed: Int) throws {
+    public init(id: Int, lane: Int, spawnTick: Int, speed: Int, gated: Bool = false) throws {
         guard id >= 0, (0..<4).contains(lane), (0...128).contains(spawnTick),
               (1...3).contains(speed) else { throw WaveError.invalidPlan }
         self.id = id
         self.lane = lane
         self.spawnTick = spawnTick
         self.speed = speed
+        self.gated = gated
     }
 }
 
@@ -61,6 +126,7 @@ public struct WavePlan: Equatable, Sendable {
 
     public init(birds: [Bird]) throws {
         guard !birds.isEmpty, birds.count <= 64,
+              birds.filter(\.gated).count * 2 <= birds.count,
               Set(birds.map(\.id)).count == birds.count,
               birds.allSatisfy({ (0..<4).contains($0.lane) && (0...128).contains($0.spawnTick) && (1...3).contains($0.speed) && $0.id >= 0 })
         else { throw WaveError.invalidPlan }
@@ -100,7 +166,9 @@ public struct WavePlan: Equatable, Sendable {
 }
 
 public struct WaveEvent: Equatable, Sendable {
-    public enum Result: Equatable, Sendable { case bonk(BlockerKind), escape }
+    /// `.bonk` = a blocker affected the bird (bonk, push-back, catch or stall).
+    /// `.bonusRelease` = a gated bird escaped untouched; it also counts as an escape.
+    public enum Result: Equatable, Sendable { case bonk(BlockerKind), escape, bonusRelease }
     public let tick: Int
     public let birdID: Int
     public let lane: Int
@@ -111,11 +179,18 @@ public struct WaveEngine: Sendable {
     private struct ActiveBird: Sendable {
         let bird: Bird
         var position: Int
+        var stall = 0
+        /// A blocker already affected this bird; it can never be affected twice.
+        var touched = false
     }
     private struct PlacedBlocker: Sendable {
         let kind: BlockerKind
         var readyTick: Int
+        var charges: Int?
+        var spent: Bool { (charges ?? 1) <= 0 }
     }
+
+    public static let releaseBonus = 25
 
     public let plan: WavePlan
     public private(set) var tick = 0
@@ -123,6 +198,7 @@ public struct WaveEngine: Sendable {
     public private(set) var score = 0
     public private(set) var bonks = 0
     public private(set) var escapes = 0
+    public private(set) var bonusReleases = 0
     public private(set) var events: [WaveEvent] = []
     private var active: [ActiveBird] = []
     private var blockers: [Int: PlacedBlocker] = [:]
@@ -134,25 +210,28 @@ public struct WaveEngine: Sendable {
         self.energy = energy
     }
 
+    /// Coins this wave pays; deterministic from score. Spending lives in `Progress`.
+    public var coinsEarned: Int { score / 5 }
+
     public var isFinished: Bool { nextBird == plan.birds.count && active.isEmpty }
     public func blocker(in lane: Int) -> BlockerKind? { blockers[lane]?.kind }
 
     /// Read-only frame for SpriteKit; never mutate rules from rendering.
-    public var activeBirds: [(id: Int, lane: Int, speed: Int, position: Int)] {
-        active.map { ($0.bird.id, $0.bird.lane, $0.bird.speed, $0.position) }
+    public var activeBirds: [(id: Int, lane: Int, speed: Int, position: Int, gated: Bool)] {
+        active.map { ($0.bird.id, $0.bird.lane, $0.bird.speed, $0.position, $0.bird.gated) }
     }
 
     public var blockedLanes: [(lane: Int, kind: BlockerKind, cooling: Bool)] {
         blockers.keys.sorted().compactMap { lane in
-            blockers[lane].map { (lane, $0.kind, $0.readyTick > tick) }
+            blockers[lane].map { (lane, $0.kind, $0.readyTick > tick || $0.spent) }
         }
     }
 
     /// Preview the next few ticks before birds enter; no hidden bird data.
-    public var incomingBirds: [(lane: Int, speed: Int, ticksAway: Int)] {
+    public var incomingBirds: [(lane: Int, speed: Int, ticksAway: Int, gated: Bool)] {
         guard nextBird < plan.birds.count else { return [] }
         return plan.birds[nextBird...].filter { $0.spawnTick < tick + 3 }.map {
-            ($0.lane, $0.speed, $0.spawnTick - tick)
+            ($0.lane, $0.speed, $0.spawnTick - tick, $0.gated)
         }
     }
 
@@ -163,7 +242,7 @@ public struct WaveEngine: Sendable {
         guard blockers[lane] == nil else { throw WaveError.occupiedLane }
         guard energy >= kind.cost else { throw WaveError.insufficientEnergy }
         energy -= kind.cost
-        blockers[lane] = PlacedBlocker(kind: kind, readyTick: tick)
+        blockers[lane] = PlacedBlocker(kind: kind, readyTick: tick, charges: kind.capacity)
     }
 
     /// Spawns, then moves, then resolves crossing row 3 or escaping row 6.
@@ -178,17 +257,43 @@ public struct WaveEngine: Sendable {
         var survivors: [ActiveBird] = []
         var resolved: [WaveEvent] = []
         for var flying in active {
+            if flying.stall > 0 {
+                flying.stall -= 1
+                survivors.append(flying)
+                continue
+            }
             let old = flying.position
             flying.position += flying.bird.speed
             let lane = flying.bird.lane
-            if old < 3 && flying.position >= 3, var placed = blockers[lane], placed.readyTick <= tick {
-                resolved.append(WaveEvent(tick: tick, birdID: flying.bird.id, lane: lane, result: .bonk(placed.kind)))
-                score += placed.kind.points
+            if old < 3 && flying.position >= 3, !flying.touched,
+               var placed = blockers[lane], placed.readyTick <= tick, !placed.spent {
+                let kind = placed.kind
+                resolved.append(WaveEvent(tick: tick, birdID: flying.bird.id, lane: lane, result: .bonk(kind)))
+                score += kind.points
                 bonks += 1
-                placed.readyTick = tick + placed.kind.cooldown + 1
+                placed.readyTick = tick + kind.cooldown + 1
+                if let charges = placed.charges { placed.charges = charges - 1 }
                 blockers[lane] = placed
+                flying.touched = true
+                switch kind {
+                case .wall, .trampoline, .tar, .balloonNet:
+                    break // bird is gone
+                case .fan:
+                    flying.position = 0
+                    survivors.append(flying)
+                case .decoyFeeder:
+                    flying.position = 2
+                    flying.stall = BlockerKind.stallTicks
+                    survivors.append(flying)
+                }
             } else if flying.position >= 6 {
-                resolved.append(WaveEvent(tick: tick, birdID: flying.bird.id, lane: lane, result: .escape))
+                if flying.bird.gated && !flying.touched {
+                    resolved.append(WaveEvent(tick: tick, birdID: flying.bird.id, lane: lane, result: .bonusRelease))
+                    score += WaveEngine.releaseBonus
+                    bonusReleases += 1
+                } else {
+                    resolved.append(WaveEvent(tick: tick, birdID: flying.bird.id, lane: lane, result: .escape))
+                }
                 escapes += 1
             } else {
                 survivors.append(flying)

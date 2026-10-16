@@ -14,6 +14,11 @@ final class FlockBlockLaunchTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Four flock lanes"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Blocker tray"].exists)
         XCTAssertTrue(app.buttons["wave.start"].exists)
+        // Earn-only unlocks start locked and disabled: no coins, no purchase path.
+        for id in ["unlock.fan", "unlock.net", "unlock.decoy"] {
+            XCTAssertTrue(app.buttons[id].exists, id)
+            XCTAssertFalse(app.buttons[id].isEnabled, id)
+        }
     }
 
     /// Real iPhone journey: start → pick blocker → tap lane → results → replay.
@@ -43,6 +48,8 @@ final class FlockBlockLaunchTests: XCTestCase {
                     evaluatedWith: status)
         waitForExpectations(timeout: 40)
 
+        // Results offer both a replay and the next ladder wave.
+        XCTAssertTrue(app.buttons["wave.next"].waitForExistence(timeout: 5))
         let replay = app.buttons["wave.replay"]
         XCTAssertTrue(replay.waitForExistence(timeout: 5))
         XCTAssertTrue(replay.isEnabled)

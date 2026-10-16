@@ -8,9 +8,9 @@ struct FlockKitTests {
         #expect(FlockKit.domain == "FlockKit")
     }
 
-    @Test("milestone marker is set for M2")
+    @Test("milestone marker is set for M3")
     func milestoneMarker() {
-        #expect(FlockKit.milestone == "M2-playable")
+        #expect(FlockKit.milestone == "M3-depth")
     }
 
     @Test("skeleton exposes no stored state beyond constants")

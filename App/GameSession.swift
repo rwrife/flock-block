@@ -7,7 +7,7 @@ enum WavePhase: Equatable {
     case idle, running, finished
 }
 
-/// Drives one fixed tutorial wave: engine ticks, scene frames, haptics.
+/// Drives a deterministic wave ladder: engine ticks, scene frames, haptics.
 /// Placement funnels through `FlockWorkspaceLayout` so a future iPhone Duo
 /// split changes that seam, not the game.
 @MainActor
@@ -21,6 +21,8 @@ final class WaveSession {
     private(set) var bonks = 0
     private(set) var escapes = 0
     private(set) var energy = 12
+    private(set) var bonusReleases = 0
+    private(set) var progress = GameProgress()
     private(set) var announcement = ""
     var selectedKind: BlockerKind?
     weak var scene: FlockFieldScene?
@@ -32,24 +34,35 @@ final class WaveSession {
     var statusLine: String {
         if phase == .finished { return resultsSummary }
         if !announcement.isEmpty { return announcement }
-        return phase == .idle ? "Tap Start wave" : "Wave running — pick a blocker, then a lane"
+        return phase == .idle
+            ? "Tap Start wave. Green rings: let them through for a bonus."
+            : "Wave running — pick a blocker, then a lane"
     }
 
     var resultsSummary: String {
         "Wave complete — score \(score) · \(bonks) bonks · \(escapes) escapes"
+            + (bonusReleases > 0 ? " · \(bonusReleases) bonus \(bonusReleases == 1 ? "release" : "releases")" : "")
+            + " · +\(coinsEarned) coins"
     }
 
+    var coinsEarned: Int { score / 5 }
+
+    func isUnlocked(_ kind: BlockerKind) -> Bool { progress.unlocked.contains(kind) }
+
     func toggleSelection(_ kind: BlockerKind) {
-        guard phase == .running else { return }
+        guard phase == .running, isUnlocked(kind) else { return }
         selectedKind = selectedKind == kind ? nil : kind
     }
 
     func startWave() {
-        guard let engine = try? WaveEngine(plan: .tutorialFixture) else { return }
+        guard let plan = try? WaveLadder.plan(for: progress.level),
+              let engine = try? WaveEngine(plan: plan, energy: WaveLadder.energy(for: progress.level))
+        else { return }
         wave = engine
         score = 0
         bonks = 0
         escapes = 0
+        bonusReleases = 0
         energy = engine.energy
         announcement = ""
         selectedKind = nil
@@ -66,8 +79,29 @@ final class WaveSession {
         }
     }
 
+    /// Tray unlock button. Coins come only from finished waves — no purchase API.
+    func unlock(_ kind: BlockerKind) {
+        guard phase != .running else { return }
+        if progress.unlock(kind) {
+            announcement = "\(kind.displayName) unlocked — \(progress.coins) coins left"
+            UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+        } else {
+            announcement = "\(kind.displayName) needs \(kind.unlockCost) coins — finish waves to earn"
+        }
+    }
+
+    func replayWave() {
+        startWave()
+    }
+
+    func playNextWave() {
+        guard phase == .finished else { return }
+        progress.nextWave()
+        startWave()
+    }
+
     func placeBlocker(_ kind: BlockerKind, lane: Int) {
-        guard phase == .running, var engine = wave else { return }
+        guard phase == .running, isUnlocked(kind), var engine = wave else { return }
         do {
             try engine.place(kind, in: lane)
             wave = engine
@@ -110,6 +144,7 @@ final class WaveSession {
         bonks = engine.bonks
         escapes = engine.escapes
         energy = engine.energy
+        bonusReleases = engine.bonusReleases
         if events.contains(where: {
             if case .bonk = $0.result { return true }
             return false
@@ -118,8 +153,10 @@ final class WaveSession {
         }
         render()
         if engine.isFinished {
+            progress.finish(score: engine.score, coinsEarned: engine.coinsEarned)
             phase = .finished
             selectedKind = nil
+            announcement = ""
             runLoop?.cancel()
             runLoop = nil
         }
@@ -130,13 +167,13 @@ final class WaveSession {
         // Row 6 is the escape line; normalise so a blocker sits mid-field.
         let escapeRow = 6
         let birds = engine.activeBirds.map { bird in
-            FlockBirdView(id: bird.id, lane: bird.lane, speed: bird.speed,
+            FlockBirdView(id: bird.id, lane: bird.lane, speed: bird.speed, gated: bird.gated,
                           progress: Double(bird.position + bird.speed) / Double(escapeRow))
         }
         let blockers = engine.blockedLanes.map {
             FlockBlockerView(kindRaw: $0.kind.rawValue, lane: $0.lane, cooling: $0.cooling)
         }
-        let incoming = engine.incomingBirds.map { ($0.lane, $0.ticksAway) }
+        let incoming = engine.incomingBirds.map { ($0.lane, $0.ticksAway, $0.gated) }
         scene?.updateWave(birds: birds, blockers: blockers, incoming: incoming)
     }
 }

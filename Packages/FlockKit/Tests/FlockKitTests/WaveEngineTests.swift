@@ -7,15 +7,18 @@ struct WaveEngineTests {
         try WaveEngine(plan: WavePlan(birds: birds), energy: energy)
     }
 
-    @Test("wall, trampoline and tar bonk with documented scores")
+    @Test("all six blockers score their documented bonk points")
     func collisionPolicies() throws {
-        for (kind, points) in [(BlockerKind.wall, 10), (.trampoline, 15), (.tar, 20)] {
+        for (kind, points) in [(BlockerKind.wall, 10), (.trampoline, 15), (.tar, 20),
+                               (.fan, 12), (.balloonNet, 18), (.decoyFeeder, 8)] {
             var subject = try Self.engine([try Bird(id: 1, lane: 2, spawnTick: 0, speed: 1)])
             try subject.place(kind, in: 2)
             #expect(subject.advance().isEmpty) // tick 0 -> row 1
             #expect(subject.advance().isEmpty) // tick 1 -> row 2
             let hit = subject.advance()        // tick 2 -> crosses row 3
             #expect(hit == [WaveEvent(tick: 2, birdID: 1, lane: 2, result: .bonk(kind))])
+            #expect(subject.bonks == 1)
+            while !subject.isFinished { _ = subject.advance() } // fan/decoy survive the hit
             #expect(subject.score == points && subject.bonks == 1 && subject.isFinished)
         }
     }
@@ -128,5 +131,156 @@ struct WaveEngineTests {
         #expect(subject.advance().isEmpty)
         #expect(throws: WaveError.waveFinished) { try subject.place(.wall, in: 0) }
         #expect((subject.tick, subject.energy, subject.events) == before)
+    }
+
+    @Test("fan blows a bird back to row 0 once, then cooldown lets it through")
+    func fanPushBack() throws {
+        var subject = try Self.engine([try Bird(id: 1, lane: 1, spawnTick: 0, speed: 3)])
+        try subject.place(.fan, in: 1)
+        let hit = subject.advance() // speed 3 crosses row 3 on the first tick
+        #expect(hit == [WaveEvent(tick: 0, birdID: 1, lane: 1, result: .bonk(.fan))])
+        // Bird sits at row 0; fan is cooling, so it sails past and escapes.
+        while !subject.isFinished { _ = subject.advance() }
+        #expect(subject.escapes == 1 && subject.bonks == 1 && subject.score == 12)
+        // Second pass can never be pushed again: touched birds stay immune.
+        #expect(subject.events.filter { $0.birdID == 1 }.count == 2)
+    }
+
+    @Test("balloon net catches two birds then pops")
+    func netCapacity() throws {
+        var subject = try Self.engine([
+            try Bird(id: 1, lane: 2, spawnTick: 0, speed: 1),
+            try Bird(id: 2, lane: 2, spawnTick: 4, speed: 1),
+            try Bird(id: 3, lane: 2, spawnTick: 8, speed: 1),
+        ])
+        try subject.place(.balloonNet, in: 2)
+        while !subject.isFinished { _ = subject.advance() }
+        #expect(subject.bonks == 2 && subject.escapes == 1)
+        #expect(subject.score == 36 && subject.blocker(in: 2) == .balloonNet)
+    }
+
+    @Test("decoy feeder stalls a bird for exactly stallTicks then it escapes")
+    func decoyStall() throws {
+        var subject = try Self.engine([try Bird(id: 1, lane: 0, spawnTick: 0, speed: 1)])
+        try subject.place(.decoyFeeder, in: 0)
+        _ = subject.advance() // row 1
+        _ = subject.advance() // row 2
+        let hit = subject.advance() // crosses 3, pushed back to 2, stalls 3
+        #expect(hit == [WaveEvent(tick: 2, birdID: 1, lane: 0, result: .bonk(.decoyFeeder))])
+        for _ in 0..<BlockerKind.stallTicks { #expect(subject.advance().isEmpty) }
+        // Released at row 2, speed 1: rows 3,4,5 then escape.
+        #expect(subject.advance().isEmpty)
+        #expect(subject.advance().isEmpty)
+        #expect(subject.advance().isEmpty)
+        let gone = subject.advance()
+        #expect(gone == [WaveEvent(tick: 9, birdID: 1, lane: 0, result: .escape)])
+        #expect(subject.bonks == 1 && subject.score == 8)
+    }
+
+    @Test("release-for-bonus gate pays only for an untouched gated bird")
+    func gatedBonus() throws {
+        func run(blocked: Bool) throws -> WaveEngine {
+            var subject = try Self.engine([
+                try Bird(id: 1, lane: 0, spawnTick: 0, speed: 1, gated: true),
+                try Bird(id: 2, lane: 1, spawnTick: 0, speed: 1),
+            ], energy: 12)
+            if blocked { try subject.place(.wall, in: 0) }
+            while !subject.isFinished { _ = subject.advance() }
+            return subject
+        }
+        let released = try run(blocked: false)
+        #expect(released.bonusReleases == 1)
+        #expect(released.events.contains(WaveEvent(tick: 5, birdID: 1, lane: 0, result: .bonusRelease)))
+        #expect(released.score == WaveEngine.releaseBonus) // gated bird also counts as an escape
+        #expect(released.escapes == 2 && released.bonusReleases == 1)
+        let bonked = try run(blocked: true)
+        #expect(bonked.bonusReleases == 0)
+        #expect(bonked.score == 10) // the wall ate the gate
+        #expect(bonked.events.contains(WaveEvent(tick: 2, birdID: 1, lane: 0, result: .bonk(.wall))))
+        #expect(!bonked.events.contains { $0.birdID == 1 && $0.result == .escape })
+    }
+
+    @Test("a wave that is nothing but bonus gates is rejected as unwinnable pressure")
+    func gateShareCap() throws {
+        #expect(throws: WaveError.invalidPlan) {
+            try WavePlan(birds: [
+                try Bird(id: 1, lane: 0, spawnTick: 0, speed: 1, gated: true),
+                try Bird(id: 2, lane: 1, spawnTick: 0, speed: 1, gated: true),
+            ])
+        }
+        // Half gated is the documented maximum and is accepted.
+        let ok = try WavePlan(birds: [
+            try Bird(id: 1, lane: 0, spawnTick: 0, speed: 1, gated: true),
+            try Bird(id: 2, lane: 1, spawnTick: 0, speed: 1),
+        ])
+        #expect(ok.birds.filter(\.gated).count == 1)
+    }
+
+    @Test("ladder is deterministic, bounded and every wave terminates")
+    func ladderFixtures() throws {
+        for level in 1...16 {
+            func replay() throws -> (Int, Int, [WaveEvent]) {
+                var subject = try WaveEngine(plan: WaveLadder.plan(for: level),
+                                            energy: WaveLadder.energy(for: level))
+                var steps = 0
+                while !subject.isFinished {
+                    _ = subject.advance()
+                    steps += 1
+                    #expect(steps < 300, "level \(level) never terminates")
+                }
+                return (subject.score, subject.coinsEarned, subject.events)
+            }
+            let first = try replay()
+            #expect(first.2.first?.tick ?? 0 >= 35, "level \(level) starts before the one-thumb warm-up")
+            let second = try replay()
+            #expect(first == second, "level \(level) replay diverged")
+        }
+        #expect(throws: WaveError.invalidPlan) { try WaveLadder.plan(for: 0) }
+        #expect(throws: WaveError.invalidPlan) { try WaveLadder.plan(for: 17) }
+    }
+
+    @Test("coins are earn-only: unlocks subtract, never top up")
+    func earnOnlyProgress() throws {
+        var progress = GameProgress()
+        #expect(progress.unlocked == Set(BlockerKind.allCases.filter(\.isStarter)))
+        let noCoinsUnlock = progress.unlock(.fan)
+        #expect(!noCoinsUnlock) // 0 coins
+        #expect(progress.coins == 0)
+        let earned = progress.finish(score: 120, coinsEarned: 24)
+        #expect(earned)
+        #expect(progress.coins == 24 && progress.highScore == 120)
+        let rejectedScore = progress.finish(score: -5, coinsEarned: 10)
+        #expect(!rejectedScore)
+        let rejectedCoins = progress.finish(score: 5, coinsEarned: -10)
+        #expect(!rejectedCoins)
+        #expect(progress.coins == 24 && progress.highScore == 120)
+        let fanUnlocked = progress.unlock(.fan)
+        #expect(fanUnlocked)
+        #expect(progress.coins == 18 && progress.unlocked.contains(.fan))
+        let repeatUnlock = progress.unlock(.fan)
+        #expect(!repeatUnlock) // no double purchase, no refund
+        #expect(progress.coins == 18)
+        let netUnlocked = progress.unlock(.balloonNet)
+        #expect(netUnlocked)
+        #expect(progress.coins == 8)
+        let decoyNoCoins = progress.unlock(.decoyFeeder) // needs 14
+        #expect(!decoyNoCoins)
+        _ = progress.finish(score: 30, coinsEarned: 6) // +6 -> 14
+        let decoyUnlocked = progress.unlock(.decoyFeeder)
+        #expect(decoyUnlocked)
+        #expect(progress.coins == 0 && progress.unlocked == Set(BlockerKind.allCases))
+        for _ in 0..<20 { progress.nextWave() }
+        #expect(progress.level == 16)
+    }
+
+    @Test("level 3 ladder guarantees a reachable release bonus; gate blocking is tested separately")
+    func ladderGateTradeoff() throws {
+        let plan = try WaveLadder.plan(for: 3)
+        #expect(plan.birds.contains { $0.gated })
+        var subject = try WaveEngine(plan: plan, energy: WaveLadder.energy(for: 3))
+        while !subject.isFinished { _ = subject.advance() }
+        #expect(subject.bonusReleases == plan.birds.filter(\.gated).count)
+        #expect(subject.score == subject.bonusReleases * WaveEngine.releaseBonus)
+        #expect(subject.events.count == plan.birds.count)
     }
 }
