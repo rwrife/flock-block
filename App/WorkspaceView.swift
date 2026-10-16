@@ -43,32 +43,12 @@ struct WorkspaceView: View {
                         Text("Blocker tray")
                             .font(.headline)
                         Spacer()
-                        Text("Energy \(session.energy) · Score \(session.score)")
+                        Text("Wave \(session.progress.level) · Energy \(session.energy) · Score \(session.score) · Coins \(session.progress.coins)")
                             .font(.subheadline.monospacedDigit())
                     }
-                    HStack(spacing: 4) {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 3), spacing: 4) {
                         ForEach(BlockerKind.allCases, id: \.self) { kind in
-                            Button {
-                                session.toggleSelection(kind)
-                            } label: {
-                                VStack(spacing: 1) {
-                                    Text(kind.displayName).font(.subheadline.bold())
-                                    Text("\(kind.cost) energy").font(.caption2)
-                                }
-                                .frame(maxWidth: .infinity, minHeight: 48)
-                                .background(session.selectedKind == kind ? Color.orange : Color.blue,
-                                            in: RoundedRectangle(cornerRadius: 10))
-                                .foregroundStyle(.white)
-                            }
-                            .accessibilityLabel("\(kind.displayName), \(kind.cost) energy")
-                            .accessibilityIdentifier("blocker.\(kind.displayName.lowercased())")
-                            .disabled(session.phase != .running || session.energy < kind.cost)
-                            .simultaneousGesture(
-                                DragGesture(minimumDistance: 8, coordinateSpace: .named("workspace"))
-                                    .onEnded { drag in
-                                        session.drop(kind: kind, at: drag.location, in: geometry.size)
-                                    }
-                            )
+                            trayButton(kind, workspaceSize: geometry.size)
                         }
                     }
                     Text(session.statusLine)
@@ -76,15 +56,27 @@ struct WorkspaceView: View {
                         .lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityIdentifier("wave.status")
-                    Button(session.phase == .idle ? "Start wave" : "Replay wave") {
-                        session.startWave()
+                    HStack(spacing: 8) {
+                        Button(session.phase == .idle ? "Start wave" : "Replay wave") {
+                            session.startWave()
+                        }
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background(.orange, in: RoundedRectangle(cornerRadius: 10))
+                        .foregroundStyle(.black)
+                        .accessibilityIdentifier(session.phase == .idle ? "wave.start" : "wave.replay")
+                        .disabled(session.phase == .running)
+                        if session.phase == .finished {
+                            Button("Next wave") {
+                                session.playNextWave()
+                            }
+                            .font(.headline)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .background(.green, in: RoundedRectangle(cornerRadius: 10))
+                            .foregroundStyle(.black)
+                            .accessibilityIdentifier("wave.next")
+                        }
                     }
-                    .font(.headline)
-                    .frame(maxWidth: .infinity, minHeight: 44)
-                    .background(.orange, in: RoundedRectangle(cornerRadius: 10))
-                    .foregroundStyle(.black)
-                    .accessibilityIdentifier(session.phase == .idle ? "wave.start" : "wave.replay")
-                    .disabled(session.phase == .running)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
@@ -100,10 +92,57 @@ struct WorkspaceView: View {
     }
 }
 
+extension WorkspaceView {
+    /// Unlocked kinds place blockers; locked kinds spend earned coins between
+    /// waves. No purchase path exists.
+    @ViewBuilder
+    private func trayButton(_ kind: BlockerKind, workspaceSize: CGSize) -> some View {
+        if session.isUnlocked(kind) {
+            Button {
+                session.toggleSelection(kind)
+            } label: {
+                VStack(spacing: 1) {
+                    Text(kind.displayName).font(.caption.bold()).minimumScaleFactor(0.7)
+                    Text("\(kind.cost) energy").font(.caption2)
+                }
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(session.selectedKind == kind ? Color.orange : Color.blue,
+                            in: RoundedRectangle(cornerRadius: 10))
+                .foregroundStyle(.white)
+            }
+            .accessibilityLabel("\(kind.displayName), \(kind.cost) energy, \(kind.behavior)")
+            .accessibilityIdentifier("blocker.\(kind.identifier)")
+            .disabled(session.phase != .running || session.energy < kind.cost)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 8, coordinateSpace: .named("workspace"))
+                    .onEnded { drag in
+                        session.drop(kind: kind, at: drag.location, in: workspaceSize)
+                    }
+            )
+        } else {
+            Button {
+                session.unlock(kind)
+            } label: {
+                VStack(spacing: 1) {
+                    Text(kind.displayName).font(.caption.bold()).minimumScaleFactor(0.7)
+                    Text("Unlock \(kind.unlockCost) coins").font(.caption2).minimumScaleFactor(0.7)
+                }
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(Color.gray, in: RoundedRectangle(cornerRadius: 10))
+                .foregroundStyle(.white)
+            }
+            .accessibilityLabel("Locked: \(kind.displayName), unlock for \(kind.unlockCost) coins")
+            .accessibilityIdentifier("unlock.\(kind.identifier)")
+            .disabled(session.phase == .running || session.progress.coins < kind.unlockCost)
+        }
+    }
+}
+
 struct FlockBirdView {
     let id: Int
     let lane: Int
     let speed: Int
+    let gated: Bool
     let progress: Double
 }
 
@@ -119,7 +158,7 @@ struct FlockBlockerView {
 final class FlockFieldScene: SKScene {
     private var birds: [FlockBirdView] = []
     private var blockers: [FlockBlockerView] = []
-    private var incoming: [(lane: Int, ticksAway: Int)] = []
+    private var incoming: [(lane: Int, ticksAway: Int, gated: Bool)] = []
 
     override func didMove(to view: SKView) {
         scaleMode = .resizeFill
@@ -139,7 +178,7 @@ final class FlockFieldScene: SKScene {
     }
 
     func updateWave(birds: [FlockBirdView], blockers: [FlockBlockerView],
-                    incoming: [(lane: Int, ticksAway: Int)]) {
+                    incoming: [(lane: Int, ticksAway: Int, gated: Bool)]) {
         self.birds = birds
         self.blockers = blockers
         self.incoming = incoming
@@ -170,16 +209,27 @@ final class FlockFieldScene: SKScene {
             let x = (CGFloat(blocker.lane) + 0.5) * laneWidth
             let node = SKShapeNode(rectOf: CGSize(width: laneWidth * 0.78, height: 26), cornerRadius: 8)
             node.position = CGPoint(x: x, y: row)
-            let colors: [SKColor] = [.orange, .systemTeal, .systemPurple]
+            // Colour + glyph so each kind reads without relying on hue alone.
+            let colors: [SKColor] = [.orange, .systemTeal, .systemPurple, .systemMint, .systemPink, .systemBrown]
+            let glyphs = ["W", "T", "S", "F", "N", "D"]
             node.fillColor = blocker.cooling ? .gray : colors[blocker.kindRaw]
             node.strokeColor = .white
             addChild(node)
+            let glyph = SKLabelNode(text: glyphs[blocker.kindRaw])
+            glyph.fontSize = 15
+            glyph.fontName = "Helvetica-Bold"
+            glyph.fontColor = .black
+            glyph.verticalAlignmentMode = .center
+            glyph.position = node.position
+            addChild(glyph)
         }
         for (index, notice) in incoming.enumerated() {
             let x = (CGFloat(notice.lane) + 0.5) * laneWidth
             let dot = SKShapeNode(circleOfRadius: notice.ticksAway == 0 ? 12 : 9)
-            dot.fillColor = .yellow
+            // Green + bigger ring = release-for-bonus gate: let it pass for a bonus.
+            dot.fillColor = notice.gated ? .systemGreen : .yellow
             dot.strokeColor = .white
+            dot.lineWidth = notice.gated ? 4 : 1
             dot.position = CGPoint(x: x + CGFloat(index % 2) * 5,
                                    y: size.height - 36 - CGFloat(index / 4) * 26)
             addChild(dot)
@@ -188,9 +238,9 @@ final class FlockFieldScene: SKScene {
             let x = (CGFloat(bird.lane) + 0.5) * laneWidth
             let y = size.height * (0.88 - CGFloat(bird.progress) * 0.78)
             let node = SKShapeNode(circleOfRadius: CGFloat(11 + bird.speed * 2))
-            node.fillColor = .init(red: 0.98, green: 0.72, blue: 0.28, alpha: 1)
+            node.fillColor = bird.gated ? .systemGreen : .init(red: 0.98, green: 0.72, blue: 0.28, alpha: 1)
             node.strokeColor = .white
-            node.lineWidth = 2
+            node.lineWidth = bird.gated ? 4 : 2
             node.position = CGPoint(x: x, y: y)
             addChild(node)
         }
