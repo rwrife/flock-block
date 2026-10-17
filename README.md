@@ -126,11 +126,12 @@ precisely what a dual-screen phone gives you for free.
 
 ## Status and milestones
 
-M1 foundation, the M2 playable core, and the M3 game depth are present:
+M1 foundation, M2 playable core, and M3 game depth are present, plus issue #6's
+local save slice:
 native Xcode/iPhone target, deterministic six-blocker wave ladder,
 release-for-bonus dilemma gates, earn-only coin unlocks, one-thumb SpriteKit
-wave, CI, and gates. No save/export, real generated icon, or release claim is
-yet made.
+wave, versioned atomic local save, confirmed JSON import, JSON export, and
+confirmed delete-all. No real generated icon or release claim is yet made.
 
 1. **M0 Scaffold:** plan, backlog, toolchain pins. ✔
 2. **M1 Foundation (#1):** native target, pinned CI, layout seam. ✔

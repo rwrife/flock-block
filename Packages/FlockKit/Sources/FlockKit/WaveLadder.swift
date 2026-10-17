@@ -27,6 +27,18 @@ public struct GameProgress: Equatable, Sendable {
 
     public init() {}
 
+    /// Validated restore; callers cannot inject invalid currency or skip starter unlocks.
+    public init(level: Int, coins: Int, highScore: Int, unlocked: Set<BlockerKind>) throws {
+        guard (1...16).contains(level), (0...1_000_000).contains(coins),
+              (0...100_000).contains(highScore),
+              Set(BlockerKind.allCases.filter(\.isStarter)).isSubset(of: unlocked)
+        else { throw SaveError.invalidData }
+        self.level = level
+        self.coins = coins
+        self.highScore = highScore
+        self.unlocked = unlocked
+    }
+
     @discardableResult public mutating func finish(score: Int, coinsEarned: Int) -> Bool {
         guard (0...100_000).contains(score), (0...20_000).contains(coinsEarned) else { return false }
         highScore = max(highScore, score)

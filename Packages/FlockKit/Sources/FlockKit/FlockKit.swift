@@ -12,5 +12,5 @@ public enum FlockKit {
     public static let domain = "FlockKit"
 
     /// Current build/CI milestone marker consumed by the app's debug surface.
-    public static let milestone = "M3-depth"
+    public static let milestone = "M4-save"
 }

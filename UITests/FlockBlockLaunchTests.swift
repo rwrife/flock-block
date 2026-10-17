@@ -8,7 +8,7 @@ final class FlockBlockLaunchTests: XCTestCase {
     @MainActor
     func testWorkspaceLaunches() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-ui-testing"]
+        app.launchArguments = ["-ui-testing", "-ui-reset"]
         app.launch()
 
         XCTAssertTrue(app.staticTexts["Four flock lanes"].waitForExistence(timeout: 10))
@@ -21,12 +21,82 @@ final class FlockBlockLaunchTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testSettingsPersistAndDeleteRequiresConfirmation() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-ui-reset"]
+        app.launch()
+        let settings = app.buttons["settings.open"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 10))
+        settings.tap()
+
+        // A Form row's identifier fans out to the whole merged element; the
+        // inner switch is the only reliably tappable control.
+        let row = app.switches["settings.haptics"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        let haptics = row.switches.firstMatch
+        XCTAssertTrue(haptics.waitForExistence(timeout: 5))
+        // Merged label region can swallow one tap; tap and poll with retries.
+        // Two swallowed-then-landed taps would flip back, so accept any value
+        // that differs from the pre-tap state as "flipped".
+        let before = String(describing: haptics.value)
+        var flipped = false
+        for _ in 0..<3 {
+            haptics.tap()
+            if waitForValue(of: haptics, toDifferFrom: before, settleMicroseconds: 400_000) {
+                flipped = true
+                break
+            }
+        }
+        XCTAssertTrue(flipped, "haptics toggle never flipped (before=\(before))")
+        // Canonical switch value is "0"/"1" regardless of Optional wrapping.
+        let flippedValue = String(describing: haptics.value).contains("1") ? "1" : "0"
+
+        app.buttons["settings.done"].tap()
+        app.terminate()
+        // Relaunch WITHOUT -ui-reset: the saved setting must survive.
+        app.launchArguments = ["-ui-testing"]
+        app.launch()
+        XCTAssertTrue(app.buttons["settings.open"].waitForExistence(timeout: 10))
+        app.buttons["settings.open"].tap()
+        let restored = app.switches["settings.haptics"].switches.firstMatch
+        XCTAssertTrue(restored.waitForExistence(timeout: 5))
+        XCTAssertTrue(String(describing: restored.value).contains(flippedValue),
+                      "setting did not persist: \(String(describing: restored.value)) does not match flipped state \(flippedValue)")
+
+        // Destructive delete needs explicit confirmation. Leave action sheet
+        // without choosing Delete, relaunch and prove saved state survived.
+        app.buttons["settings.delete"].tap()
+        let confirm = app.buttons["Delete everything"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["settings.open"].waitForExistence(timeout: 10))
+        app.buttons["settings.open"].tap()
+        let afterDismiss = app.switches["settings.haptics"].switches.firstMatch
+        XCTAssertTrue(afterDismiss.waitForExistence(timeout: 5))
+        XCTAssertEqual(String(describing: afterDismiss.value),
+                       String(describing: restored.value))
+    }
+
+    private func waitForValue(of element: XCUIElement, toDifferFrom before: String, settleMicroseconds: useconds_t = 100_000) -> Bool {
+        let deadline = Date().addingTimeInterval(3)
+        while Date() < deadline {
+            if String(describing: element.value) != before {
+                usleep(settleMicroseconds)
+                return true
+            }
+            usleep(50_000)
+        }
+        return String(describing: element.value) != before
+    }
+
     /// Real iPhone journey: start → pick blocker → tap lane → results → replay.
     /// The fixed tutorial wave resolves in bounded time on the pinned runtime.
     @MainActor
     func testOneThumbWaveJourney() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-ui-testing"]
+        app.launchArguments = ["-ui-testing", "-ui-reset"]
         app.launch()
 
         let start = app.buttons["wave.start"]
