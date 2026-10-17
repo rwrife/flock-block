@@ -7,6 +7,7 @@ import SwiftUI
 struct WorkspaceView: View {
     @State private var session = WaveSession()
     @State private var scene = FlockFieldScene(size: CGSize(width: 320, height: 460))
+    @State private var showingSettings = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -35,6 +36,24 @@ struct WorkspaceView: View {
                         .padding(8)
                         .background(.black.opacity(0.7), in: Capsule())
                         .allowsHitTesting(false)
+                    VStack {
+                        HStack {
+                            Spacer()
+                            Button {
+                                showingSettings = true
+                            } label: {
+                                Image(systemName: "gearshape")
+                                    .font(.body)
+                                    .foregroundStyle(.white)
+                                    .frame(width: 44, height: 44)
+                                    .background(.black.opacity(0.7), in: Circle())
+                            }
+                            .accessibilityLabel("Settings and data")
+                            .accessibilityIdentifier("settings.open")
+                        }
+                        Spacer()
+                    }
+                    .padding(6)
                 }
                 .frame(height: fieldHeight)
 
@@ -56,6 +75,14 @@ struct WorkspaceView: View {
                         .lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityIdentifier("wave.status")
+                    if session.storageLocked {
+                        Text(session.storageMessage)
+                            .font(.caption.bold())
+                            .foregroundStyle(.red)
+                            .lineLimit(2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .accessibilityIdentifier("storage.warning")
+                    }
                     HStack(spacing: 8) {
                         Button(session.phase == .idle ? "Start wave" : "Replay wave") {
                             session.startWave()
@@ -87,6 +114,9 @@ struct WorkspaceView: View {
             .coordinateSpace(name: "workspace")
             .onAppear {
                 session.scene = scene
+            }
+            .sheet(isPresented: $showingSettings) {
+                SettingsSheet(session: session)
             }
         }
     }

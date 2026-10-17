@@ -8,7 +8,7 @@ final class FlockBlockLaunchTests: XCTestCase {
     @MainActor
     func testWorkspaceLaunches() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-ui-testing"]
+        app.launchArguments = ["-ui-testing", "-ui-reset"]
         app.launch()
 
         XCTAssertTrue(app.staticTexts["Four flock lanes"].waitForExistence(timeout: 10))
@@ -21,12 +21,60 @@ final class FlockBlockLaunchTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testSettingsPersistAndDeleteRequiresConfirmation() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-ui-reset"]
+        app.launch()
+        let settings = app.buttons["settings.open"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 10))
+        settings.tap()
+
+        let haptics = app.switches["settings.haptics"]
+        XCTAssertTrue(haptics.waitForExistence(timeout: 5))
+        let before = String(describing: haptics.value)
+        // Merged Toggle rows can swallow a bare tap: flip and poll the value.
+        haptics.tap()
+        XCTAssertTrue(waitForValue(of: haptics, toDifferFrom: before),
+                      "haptics toggle never flipped (before=\(before))")
+        let flipped = String(describing: haptics.value)
+
+        app.buttons["settings.done"].tap()
+        app.terminate()
+        // Relaunch WITHOUT -ui-reset: the saved setting must survive.
+        app.launchArguments = ["-ui-testing"]
+        app.launch()
+        XCTAssertTrue(app.buttons["settings.open"].waitForExistence(timeout: 10))
+        app.buttons["settings.open"].tap()
+        let restored = app.switches["settings.haptics"]
+        XCTAssertTrue(restored.waitForExistence(timeout: 5))
+        XCTAssertEqual(String(describing: restored.value), flipped, "setting did not persist")
+
+        // Destructive delete needs an explicit confirmation; Cancel is inert.
+        app.buttons["settings.delete"].tap()
+        let confirm = app.buttons["Delete everything"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        app.buttons["Cancel"].firstMatch.tap()
+        XCTAssertTrue(app.switches["settings.haptics"].waitForExistence(timeout: 5))
+        XCTAssertEqual(String(describing: app.switches["settings.haptics"].value),
+                       String(describing: restored.value))
+    }
+
+    private func waitForValue(of element: XCUIElement, toDifferFrom before: String) -> Bool {
+        let deadline = Date().addingTimeInterval(3)
+        while Date() < deadline {
+            if String(describing: element.value) != before { return true }
+            usleep(100_000)
+        }
+        return String(describing: element.value) != before
+    }
+
     /// Real iPhone journey: start → pick blocker → tap lane → results → replay.
     /// The fixed tutorial wave resolves in bounded time on the pinned runtime.
     @MainActor
     func testOneThumbWaveJourney() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-ui-testing"]
+        app.launchArguments = ["-ui-testing", "-ui-reset"]
         app.launch()
 
         let start = app.buttons["wave.start"]

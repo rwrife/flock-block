@@ -23,6 +23,9 @@ final class WaveSession {
     private(set) var energy = 12
     private(set) var bonusReleases = 0
     private(set) var progress = GameProgress()
+    private(set) var settings = GameSettings()
+    private(set) var storageLocked = false
+    private(set) var storageMessage = ""
     private(set) var announcement = ""
     var selectedKind: BlockerKind?
     weak var scene: FlockFieldScene?
@@ -30,6 +33,70 @@ final class WaveSession {
     private var wave: WaveEngine?
     private var runLoop: Task<Void, Never>?
     private let haptics = UIImpactFeedbackGenerator(style: .medium)
+    private let store: ProgressStore
+
+    init(store: ProgressStore = .defaultStore()) {
+        self.store = store
+        if ProcessInfo.processInfo.arguments.contains("-ui-reset") {
+            try? store.deleteAll()
+        } else {
+            do {
+                let loaded = try store.load()
+                progress = loaded.progress
+                settings = loaded.settings
+            } catch SaveError.missingFile {
+                // First launch: fresh progress, nothing to load.
+            } catch {
+                // Corrupt/unreadable save: run fresh in memory but refuse to
+                // overwrite the file until the user deletes or restores it.
+                storageLocked = true
+                storageMessage = "Saved data could not be read. Export or delete it in Settings to unlock saving."
+            }
+        }
+    }
+
+    /// Current state as export bytes; nil while storage is being repaired.
+    func exportData() -> Data? {
+        try? ProgressSave(progress: progress, settings: settings).encode()
+    }
+
+    @discardableResult func applyImport(_ save: ProgressSave) -> Bool {
+        do {
+            try store.restore(save.encode())
+            progress = save.progress
+            settings = save.settings
+            storageLocked = false
+            storageMessage = ""
+            return true
+        } catch {
+            storageMessage = "Import failed — current save untouched"
+            return false
+        }
+    }
+
+    @discardableResult func deleteAllData() -> Bool {
+        do {
+            try store.deleteAll()
+            progress = GameProgress()
+            settings = GameSettings()
+            storageLocked = false
+            storageMessage = ""
+            phase = .idle
+            runLoop?.cancel()
+            runLoop = nil
+            wave = nil
+            selectedKind = nil
+            return true
+        } catch {
+            storageMessage = "Delete failed — nothing changed"
+            return false
+        }
+    }
+
+    func updateSettings(hapticsEnabled: Bool) {
+        settings.hapticsEnabled = hapticsEnabled
+        persist()
+    }
 
     var statusLine: String {
         if phase == .finished { return resultsSummary }
@@ -83,8 +150,9 @@ final class WaveSession {
     func unlock(_ kind: BlockerKind) {
         guard phase != .running else { return }
         if progress.unlock(kind) {
+            persist()
             announcement = "\(kind.displayName) unlocked — \(progress.coins) coins left"
-            UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+            haptic(style: .rigid)
         } else {
             announcement = "\(kind.displayName) needs \(kind.unlockCost) coins — finish waves to earn"
         }
@@ -97,6 +165,7 @@ final class WaveSession {
     func playNextWave() {
         guard phase == .finished else { return }
         progress.nextWave()
+        persist()
         startWave()
     }
 
@@ -106,7 +175,7 @@ final class WaveSession {
             try engine.place(kind, in: lane)
             wave = engine
             announcement = "\(kind.displayName) in lane \(lane + 1)"
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            haptic(style: .light)
             render()
         } catch {
             announcement = "Lane blocked — pick another"
@@ -149,16 +218,39 @@ final class WaveSession {
             if case .bonk = $0.result { return true }
             return false
         }) {
-            haptics.impactOccurred()
+            haptic(style: .medium)
         }
         render()
         if engine.isFinished {
             progress.finish(score: engine.score, coinsEarned: engine.coinsEarned)
+            persist()
             phase = .finished
             selectedKind = nil
             announcement = ""
             runLoop?.cancel()
             runLoop = nil
+        }
+    }
+
+    /// Settings-gated haptics: off means silence, never vibration.
+    private func haptic(style: UIImpactFeedbackGenerator.FeedbackStyle) {
+        guard settings.hapticsEnabled else { return }
+        if style == .medium {
+            haptics.impactOccurred()
+        } else {
+            UIImpactFeedbackGenerator(style: style).impactOccurred()
+        }
+    }
+
+    /// Durability path: called after every persisted-progress mutation. A
+    /// corrupt-save lock blocks writes so repair (import/delete) is explicit.
+    private func persist() {
+        guard !storageLocked else { return }
+        do {
+            try store.save(ProgressSave(progress: progress, settings: settings))
+        } catch {
+            storageLocked = true
+            storageMessage = "Could not write your save. Data stays in memory; export or delete it in Settings."
         }
     }
 
