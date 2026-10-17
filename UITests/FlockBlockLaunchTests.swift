@@ -64,13 +64,18 @@ final class FlockBlockLaunchTests: XCTestCase {
         XCTAssertTrue(String(describing: restored.value).contains(flippedValue),
                       "setting did not persist: \(String(describing: restored.value)) does not match flipped state \(flippedValue)")
 
-        // Destructive delete needs an explicit confirmation; Cancel is inert.
+        // Destructive delete needs explicit confirmation. Leave action sheet
+        // without choosing Delete, relaunch and prove saved state survived.
         app.buttons["settings.delete"].tap()
         let confirm = app.buttons["Delete everything"].firstMatch
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
-        app.buttons["Cancel"].firstMatch.tap()
-        XCTAssertTrue(app.switches["settings.haptics"].switches.firstMatch.waitForExistence(timeout: 5))
-        XCTAssertEqual(String(describing: app.switches["settings.haptics"].switches.firstMatch.value),
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["settings.open"].waitForExistence(timeout: 10))
+        app.buttons["settings.open"].tap()
+        let afterDismiss = app.switches["settings.haptics"].switches.firstMatch
+        XCTAssertTrue(afterDismiss.waitForExistence(timeout: 5))
+        XCTAssertEqual(String(describing: afterDismiss.value),
                        String(describing: restored.value))
     }
 
