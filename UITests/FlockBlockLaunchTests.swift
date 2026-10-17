@@ -37,11 +37,13 @@ final class FlockBlockLaunchTests: XCTestCase {
         let haptics = row.switches.firstMatch
         XCTAssertTrue(haptics.waitForExistence(timeout: 5))
         // Merged label region can swallow one tap; tap and poll with retries.
+        // Two swallowed-then-landed taps would flip back, so accept any value
+        // that differs from the pre-tap state as "flipped".
         let before = String(describing: haptics.value)
         var flipped = false
         for _ in 0..<3 {
             haptics.tap()
-            if waitForValue(of: haptics, toDifferFrom: before) {
+            if waitForValue(of: haptics, toDifferFrom: before, settleMicroseconds: 400_000) {
                 flipped = true
                 break
             }
@@ -72,11 +74,14 @@ final class FlockBlockLaunchTests: XCTestCase {
                        String(describing: restored.value))
     }
 
-    private func waitForValue(of element: XCUIElement, toDifferFrom before: String) -> Bool {
+    private func waitForValue(of element: XCUIElement, toDifferFrom before: String, settleMicroseconds: useconds_t = 100_000) -> Bool {
         let deadline = Date().addingTimeInterval(3)
         while Date() < deadline {
-            if String(describing: element.value) != before { return true }
-            usleep(100_000)
+            if String(describing: element.value) != before {
+                usleep(settleMicroseconds)
+                return true
+            }
+            usleep(50_000)
         }
         return String(describing: element.value) != before
     }
