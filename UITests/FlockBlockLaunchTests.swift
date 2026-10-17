@@ -37,7 +37,8 @@ final class FlockBlockLaunchTests: XCTestCase {
         haptics.tap()
         XCTAssertTrue(waitForValue(of: haptics, toDifferFrom: before),
                       "haptics toggle never flipped (before=\(before))")
-        let flipped = String(describing: haptics.value)
+        // Canonical switch value is "0"/"1" regardless of Optional wrapping.
+        let flipped = String(describing: haptics.value).contains("1") ? "1" : "0"
 
         app.buttons["settings.done"].tap()
         app.terminate()
@@ -48,7 +49,8 @@ final class FlockBlockLaunchTests: XCTestCase {
         app.buttons["settings.open"].tap()
         let restored = app.switches["settings.haptics"]
         XCTAssertTrue(restored.waitForExistence(timeout: 5))
-        XCTAssertEqual(String(describing: restored.value), flipped, "setting did not persist")
+        XCTAssertTrue(String(describing: restored.value).contains(flipped),
+                      "setting did not persist: \(String(describing: restored.value)) does not match flipped state \(flipped)")
 
         // Destructive delete needs an explicit confirmation; Cancel is inert.
         app.buttons["settings.delete"].tap()
