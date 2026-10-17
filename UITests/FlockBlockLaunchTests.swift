@@ -30,15 +30,25 @@ final class FlockBlockLaunchTests: XCTestCase {
         XCTAssertTrue(settings.waitForExistence(timeout: 10))
         settings.tap()
 
-        let haptics = app.switches["settings.haptics"]
+        // A Form row's identifier fans out to the whole merged element; the
+        // inner switch is the only reliably tappable control.
+        let row = app.switches["settings.haptics"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        let haptics = row.switches.firstMatch
         XCTAssertTrue(haptics.waitForExistence(timeout: 5))
+        // Merged label region can swallow one tap; tap and poll with retries.
         let before = String(describing: haptics.value)
-        // Merged Toggle rows can swallow a bare tap: flip and poll the value.
-        haptics.tap()
-        XCTAssertTrue(waitForValue(of: haptics, toDifferFrom: before),
-                      "haptics toggle never flipped (before=\(before))")
+        var flipped = false
+        for _ in 0..<3 {
+            haptics.tap()
+            if waitForValue(of: haptics, toDifferFrom: before) {
+                flipped = true
+                break
+            }
+        }
+        XCTAssertTrue(flipped, "haptics toggle never flipped (before=\(before))")
         // Canonical switch value is "0"/"1" regardless of Optional wrapping.
-        let flipped = String(describing: haptics.value).contains("1") ? "1" : "0"
+        let flippedValue = String(describing: haptics.value).contains("1") ? "1" : "0"
 
         app.buttons["settings.done"].tap()
         app.terminate()
@@ -47,18 +57,18 @@ final class FlockBlockLaunchTests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["settings.open"].waitForExistence(timeout: 10))
         app.buttons["settings.open"].tap()
-        let restored = app.switches["settings.haptics"]
+        let restored = app.switches["settings.haptics"].switches.firstMatch
         XCTAssertTrue(restored.waitForExistence(timeout: 5))
-        XCTAssertTrue(String(describing: restored.value).contains(flipped),
-                      "setting did not persist: \(String(describing: restored.value)) does not match flipped state \(flipped)")
+        XCTAssertTrue(String(describing: restored.value).contains(flippedValue),
+                      "setting did not persist: \(String(describing: restored.value)) does not match flipped state \(flippedValue)")
 
         // Destructive delete needs an explicit confirmation; Cancel is inert.
         app.buttons["settings.delete"].tap()
         let confirm = app.buttons["Delete everything"].firstMatch
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         app.buttons["Cancel"].firstMatch.tap()
-        XCTAssertTrue(app.switches["settings.haptics"].waitForExistence(timeout: 5))
-        XCTAssertEqual(String(describing: app.switches["settings.haptics"].value),
+        XCTAssertTrue(app.switches["settings.haptics"].switches.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertEqual(String(describing: app.switches["settings.haptics"].switches.firstMatch.value),
                        String(describing: restored.value))
     }
 
