@@ -28,6 +28,12 @@ jobs:
         run: bash scripts/check_native_only.sh
       - name: Zero-network gate
         run: bash scripts/check_zero_network.sh
+      - name: Real App Store icon gate
+        run: |
+          set -eu
+          python3 scripts/check_icon.py AppStore/icon.png
+          cmp AppStore/icon.png App/Assets.xcassets/AppIcon.appiconset/icon.png
+          echo "Catalog artwork is byte-identical to the store icon: PASS"
       - name: Gitignore keeps signing material out
         run: |
           set -e

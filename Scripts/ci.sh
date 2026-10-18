@@ -114,6 +114,23 @@ xcodebuild build \
   CODE_SIGNING_REQUIRED=NO \
   2>&1 | tee "$artifact_dir/xcodebuild-build.log"
 
+phase="app_icon_resources"
+app_bundle="$derived_data/Build/Products/Debug-iphonesimulator/FlockBlock.app"
+if [[ ! -f "$app_bundle/Assets.car" ]]; then
+  echo "::error::built app is missing Assets.car (app icon asset catalog did not compile)" >&2
+  exit 1
+fi
+icon_raster_found=0
+while IFS= read -r -d '' raster; do
+  echo "Compiled app icon raster: $raster"
+  icon_raster_found=1
+done < <(find "$app_bundle" -maxdepth 1 -type f -name 'AppIcon*.png' -print0)
+if [[ "$icon_raster_found" -ne 1 ]]; then
+  echo "::error::built app contains Assets.car but no AppIcon*.png raster" >&2
+  exit 1
+fi
+echo "Built app icon resources: PASS" | tee "$artifact_dir/app-icon-resources.log"
+
 phase="device_family_guard"
 app_plist="$derived_data/Build/Products/Debug-iphonesimulator/FlockBlock.app/Info.plist"
 if [[ ! -f "$app_plist" ]]; then

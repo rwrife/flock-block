@@ -1,23 +1,9 @@
-DRAFT LISTING — planned features below. Validate against shipped app before publication.
+Flock Block is an original, offline iPhone arcade game about placing blockers instead of steering birds.
 
-Flip the bird game: in Flock Block, the birds are coming at YOU — and you build the walls.
+Four incoming lanes give you one job: read the flock and decide where to put your next obstacle. Pick from six blockers — a cardboard wall, trampoline, sticky patch, fan, balloon net and decoy feeder — then tap a lane to place it. Earn coins from waves, unlock more blockers without purchases, and decide whether to let bonus-tagged birds through for extra points. Replay a wave or move to the next one.
 
-Flocks sweep down in lanes and only you decide how they get stopped. Drag springy trampolines, sticky tar patches, spinning fans, cardboard walls, balloon nets, and decoy feeders onto the field, then watch a well-timed defense bonk the whole flock silly. Some waves get greedy: a tagged bird pays a bonus ONLY if you let it slip past, so blocking everything isn't always the winning play.
+Your score, coins, unlocked blockers and haptic setting stay on your iPhone. Export a plain JSON save, import one with confirmation, or delete local data with confirmation. No account, cloud sync, ads, in-app purchases or network connection.
 
-WHY YOU'LL LIKE IT
-- One-thumb, portrait, one-more-run sessions: every wave is under a minute.
-- You're the architect, not the victim — read the pattern, place the block.
-- Six quirky blocker types with distinct physics; unlock them with coins you earn by playing. No purchases, no ads, no timers.
-- Dilemma gates reward risky, greedy calls on top of safe defense.
-- A gentle learning curve with patterns that stay readable — no frame-perfect reflexes required.
+Designed for portrait iPhone with a blocker tray below the four-lane field. Large tap targets, labelled controls and lane status support VoiceOver; the tray scrolls with large text, and the field respects system Reduce Motion and Increased Contrast settings. Haptic feedback is optional and every action has visual and spoken status.
 
-BUILT FOR YOUR POCKET
-- Playable entirely offline. No account, no sign-up, no cloud, no trackers, no ads.
-- Your progress, coins, unlocks, and high scores stay on your device, with a one-tap full delete and a plain-JSON save export whenever you want it.
-- Designed one-handed with big targets, haptic taps, VoiceOver-labelled menus, Dynamic Type, and a reduce-motion mode.
-- Colorful, comic, zero-violence chaos: dizzy birds just shake it off and waddle away.
-
-COMING SOON TO A DUAL SCREEN
-Flock Block is designed from day one for the iPhone Duo dual-screen phone: flocks on the top screen, your blocker tray and score live on the bottom — no fingers ever covering the action. Today it plays as a standard single-screen iPhone game with the same rules, and the dual-screen mode arrives when Apple's foldable APIs ship.
-
-Flock Block is an original arcade puzzler — not affiliated with or derived from any existing game.
+Flock Block uses original artwork and a playful, non-violent theme. No dual-screen mode or iPad version is included.
