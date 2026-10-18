@@ -31,6 +31,7 @@ jobs:
       - name: Real App Store icon gate
         run: |
           set -eu
+          apt-get update && apt-get install -y --no-install-recommends python3
           python3 scripts/check_icon.py AppStore/icon.png
           cmp AppStore/icon.png App/Assets.xcassets/AppIcon.appiconset/icon.png
           echo "Catalog artwork is byte-identical to the store icon: PASS"
