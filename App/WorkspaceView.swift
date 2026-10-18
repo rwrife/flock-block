@@ -8,9 +8,17 @@ struct WorkspaceView: View {
     @State private var session = WaveSession()
     @State private var scene = FlockFieldScene(size: CGSize(width: 320, height: 460))
     @State private var showingSettings = false
+    @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// Increased Contrast deepens the chrome behind field overlays so labels
+    /// keep contrast when the system asks for it.
+    private var chromeOpacity: Double { contrast == .increased ? 0.92 : 0.7 }
+    private var roomy: Bool { dynamicTypeSize.isAccessibilitySize }
 
     var body: some View {
         GeometryReader { geometry in
+            let workspaceSize = geometry.size
             let fieldHeight = geometry.size.height * session.layout.fieldFraction
             VStack(spacing: 0) {
                 ZStack(alignment: .top) {
@@ -25,7 +33,8 @@ struct WorkspaceView: View {
                                     .contentShape(Rectangle())
                                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                             }
-                            .accessibilityLabel("Place in lane \(lane + 1)")
+                            .accessibilityLabel("Lane \(lane + 1), \(session.laneSummary(lane))")
+                            .accessibilityHint(session.selectionSummary)
                             .accessibilityIdentifier("lane.\(lane + 1)")
                             .disabled(session.phase != .running)
                         }
@@ -34,7 +43,7 @@ struct WorkspaceView: View {
                         .font(.headline)
                         .foregroundStyle(.white)
                         .padding(8)
-                        .background(.black.opacity(0.7), in: Capsule())
+                        .background(.black.opacity(chromeOpacity), in: Capsule())
                         .allowsHitTesting(false)
                     VStack {
                         HStack {
@@ -46,7 +55,7 @@ struct WorkspaceView: View {
                                     .font(.body)
                                     .foregroundStyle(.white)
                                     .frame(width: 44, height: 44)
-                                    .background(.black.opacity(0.7), in: Circle())
+                                    .background(.black.opacity(chromeOpacity), in: Circle())
                             }
                             .accessibilityLabel("Settings and data")
                             .accessibilityIdentifier("settings.open")
@@ -58,21 +67,22 @@ struct WorkspaceView: View {
                 .frame(height: fieldHeight)
 
                 VStack(spacing: 5) {
-                    HStack {
-                        Text("Blocker tray")
-                            .font(.headline)
-                        Spacer()
-                        Text("Wave \(session.progress.level) · Energy \(session.energy) · Score \(session.score) · Coins \(session.progress.coins)")
-                            .font(.subheadline.monospacedDigit())
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Blocker tray").font(.headline)
+                        Text(session.hudLine).font(.subheadline.monospacedDigit())
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 3), spacing: 4) {
-                        ForEach(BlockerKind.allCases, id: \.self) { kind in
-                            trayButton(kind, workspaceSize: geometry.size)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    ScrollView(.vertical, showsIndicators: false) {
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 3), spacing: 4) {
+                            ForEach(BlockerKind.allCases, id: \.self) { kind in
+                                trayButton(kind, workspaceSize: workspaceSize)
+                            }
                         }
                     }
                     Text(session.statusLine)
                         .font(.caption)
-                        .lineLimit(2)
+                        .lineLimit(roomy ? 4 : 2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityIdentifier("wave.status")
                     if session.storageLocked {
@@ -114,6 +124,10 @@ struct WorkspaceView: View {
             .coordinateSpace(name: "workspace")
             .onAppear {
                 session.scene = scene
+                scene.usesStaticCues = reduceMotion
+            }
+            .onChange(of: reduceMotion) { _, off in
+                scene.usesStaticCues = off
             }
             .sheet(isPresented: $showingSettings) {
                 SettingsSheet(session: session)
@@ -189,6 +203,11 @@ final class FlockFieldScene: SKScene {
     private var birds: [FlockBirdView] = []
     private var blockers: [FlockBlockerView] = []
     private var incoming: [(lane: Int, ticksAway: Int, gated: Bool)] = []
+    /// Reduce Motion: incoming-tick previews lose their alternating wobble
+    /// offset; everything else is already a static redraw (no SKActions).
+    var usesStaticCues = false {
+        didSet { if oldValue != usesStaticCues { redraw() } }
+    }
 
     override func didMove(to view: SKView) {
         scaleMode = .resizeFill
@@ -260,7 +279,7 @@ final class FlockFieldScene: SKScene {
             dot.fillColor = notice.gated ? .systemGreen : .yellow
             dot.strokeColor = .white
             dot.lineWidth = notice.gated ? 4 : 1
-            dot.position = CGPoint(x: x + CGFloat(index % 2) * 5,
+            dot.position = CGPoint(x: x + (usesStaticCues ? 0 : CGFloat(index % 2) * 5),
                                    y: size.height - 36 - CGFloat(index / 4) * 26)
             addChild(dot)
         }

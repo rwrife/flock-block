@@ -22,6 +22,30 @@ final class FlockBlockLaunchTests: XCTestCase {
     }
 
     @MainActor
+    func testAccessibleLaneLabelsAndLargeTextControls() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-ui-reset", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launchEnvironment["UIPreferredContentSizeCategoryName"] = "UICTContentSizeCategoryAccessibilityXXXL"
+        app.launch()
+
+        let start = app.buttons["wave.start"]
+        XCTAssertTrue(start.waitForExistence(timeout: 10))
+        XCTAssertTrue(start.isHittable)
+        XCTAssertTrue(app.buttons["settings.open"].isHittable)
+        start.tap()
+
+        let lane = app.buttons["lane.1"]
+        XCTAssertTrue(lane.waitForExistence(timeout: 5))
+        XCTAssertTrue(lane.label.contains("Lane 1"), lane.label)
+        XCTAssertTrue(lane.label.contains("empty"), lane.label)
+        XCTAssertTrue(lane.isHittable)
+        app.buttons["settings.open"].tap()
+        // Toolbar items bridge above the scroll view; the data rows below
+        // the fold may not be realized at AX5 sizes.
+        XCTAssertTrue(app.buttons["settings.done"].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
     func testSettingsPersistAndDeleteRequiresConfirmation() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-ui-testing", "-ui-reset"]

@@ -114,7 +114,24 @@ final class WaveSession {
 
     var coinsEarned: Int { score / 5 }
 
+    var hudLine: String {
+        "Wave \(progress.level) · Energy \(energy) · Score \(score) · Coins \(progress.coins)"
+    }
+
     func isUnlocked(_ kind: BlockerKind) -> Bool { progress.unlocked.contains(kind) }
+
+    func laneSummary(_ lane: Int) -> String {
+        guard let wave else { return "No active wave" }
+        let blocker = wave.blocker(in: lane)?.displayName ?? "empty"
+        let birds = wave.activeBirds.filter { $0.lane == lane }.count
+        let incoming = wave.incomingBirds.filter { $0.lane == lane }.count
+        return "\(blocker) blocker, \(birds) birds, \(incoming) incoming"
+    }
+
+    var selectionSummary: String {
+        selectedKind.map { "Selected \($0.displayName); tap a lane to place it" }
+            ?? "Select a blocker, then tap a lane"
+    }
 
     func toggleSelection(_ kind: BlockerKind) {
         guard phase == .running, isUnlocked(kind) else { return }
