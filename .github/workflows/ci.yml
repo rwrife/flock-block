@@ -28,6 +28,8 @@ jobs:
         run: bash scripts/check_native_only.sh
       - name: Zero-network gate
         run: bash scripts/check_zero_network.sh
+      - name: Release-contract gate
+        run: bash scripts/check_release_contract.sh
       - name: Real App Store icon gate
         run: |
           set -eu

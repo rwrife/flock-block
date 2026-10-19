@@ -126,12 +126,12 @@ precisely what a dual-screen phone gives you for free.
 
 ## Status and milestones
 
-M1 foundation, M2 playable core, and M3 game depth are present, plus issue #6's
-local save slice:
-native Xcode/iPhone target, deterministic six-blocker wave ladder,
-release-for-bonus dilemma gates, earn-only coin unlocks, one-thumb SpriteKit
-wave, versioned atomic local save, confirmed JSON import, JSON export, and
-confirmed delete-all. No real generated icon or release claim is yet made.
+M1 foundation, M2 playable core, and M3 game depth are present, plus issues
+#5 and #6's slices: native Xcode/iPhone target, deterministic six-blocker wave
+ladder, release-for-bonus dilemma gates, earn-only coins, one-thumb SpriteKit
+wave, versioned atomic local save, confirmed JSON import, JSON export,
+confirmed delete-all, truthful store copy, and the real generated icon
+(`AppStore/icon.png`, wired into the app icon catalog).
 
 1. **M0 Scaffold:** plan, backlog, toolchain pins. ✔
 2. **M1 Foundation (#1):** native target, pinned CI, layout seam. ✔
@@ -164,11 +164,12 @@ build results from Linux.
 
 Signing/TestFlight uses the repo's App Store Connect Actions secrets
 (`ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8`, `ASC_TEAM_ID` — names only,
-values never logged). Packaging issue requires porting the proven fleet
-template `rwrife/cook-console` `.github/workflows/release.yml`: `v*` tag or
-manual dispatch → macos-26 job → iOS 26+ SDK enforcement → signed IPA archive
-→ TestFlight upload via the App Store Connect API → ASC processing poll →
-GitHub release. No new signing flows.
+values never logged). `.github/workflows/release.yml` is ported from
+`rwrife/cook-console`: `v*` tag or manual dispatch → macos-26 job → exact
+Xcode 26.0.1 (17A400) and iOS 26.0 SDK pin → signed IPA archive → TestFlight
+upload via the App Store Connect API → ASC processing poll → GitHub release.
+See [release runbook](docs/release.md). A live successful Actions run and ASC
+processed build ID are required before treating release as shipped.
 
 ## License
 
